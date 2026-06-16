@@ -8,11 +8,13 @@ import (
 	"github.com/thomasbilk/osm2xpgo/pkg/dsf"
 )
 
+const earthNavDataDir = "Earth nav data"
+
 // TileOutputPath returns the full filesystem path for a tile's DSF file
 // by joining the output directory with the tile's relative path.
 // Example: TileOutputPath("/out", TileCoord{Lat:43, Lon:7}) → "/out/+40+000/+43+007.dsf"
 func TileOutputPath(outputDir string, tile dsf.TileCoord) string {
-	return filepath.Join(outputDir, tile.TilePath())
+	return filepath.Join(outputDir, earthNavDataDir, tile.TilePath())
 }
 
 // EnsureTileDir creates the directory structure required for a tile's DSF file.

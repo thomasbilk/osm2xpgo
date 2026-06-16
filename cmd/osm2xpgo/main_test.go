@@ -141,6 +141,14 @@ func TestRunMonacoWritesExpectedGeoTile(t *testing.T) {
 	if foundDSF == "" {
 		t.Fatal("expected at least one DSF output file")
 	}
+	if !strings.Contains(filepath.ToSlash(foundDSF), "/Earth nav data/") {
+		t.Fatalf("expected DSF file under Earth nav data, got %q", foundDSF)
+	}
+
+	wedPath := filepath.Join(tmp, "earth.wed.xml")
+	if _, err := os.Stat(wedPath); err != nil {
+		t.Fatalf("expected earth.wed.xml to be generated: %v", err)
+	}
 
 	rel, err := filepath.Rel(tmp, foundDSF)
 	if err != nil {

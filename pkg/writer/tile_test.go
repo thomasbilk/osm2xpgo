@@ -19,31 +19,31 @@ func TestTileOutputPath(t *testing.T) {
 			name:      "positive lat and lon",
 			outputDir: "output",
 			tile:      dsf.TileCoord{Lat: 43, Lon: 7},
-			want:      filepath.Join("output", "+40+000", "+43+007.dsf"),
+			want:      filepath.Join("output", "Earth nav data", "+40+000", "+43+007.dsf"),
 		},
 		{
 			name:      "negative lat and lon",
 			outputDir: "output",
 			tile:      dsf.TileCoord{Lat: -12, Lon: -3},
-			want:      filepath.Join("output", "-20-010", "-12-003.dsf"),
+			want:      filepath.Join("output", "Earth nav data", "-20-010", "-12-003.dsf"),
 		},
 		{
 			name:      "zero lat and lon",
 			outputDir: "/scenery",
 			tile:      dsf.TileCoord{Lat: 0, Lon: 0},
-			want:      filepath.Join("/scenery", "+00+000", "+00+000.dsf"),
+			want:      filepath.Join("/scenery", "Earth nav data", "+00+000", "+00+000.dsf"),
 		},
 		{
 			name:      "boundary at 10-degree grid",
 			outputDir: "out",
 			tile:      dsf.TileCoord{Lat: 50, Lon: -80},
-			want:      filepath.Join("out", "+50-080", "+50-080.dsf"),
+			want:      filepath.Join("out", "Earth nav data", "+50-080", "+50-080.dsf"),
 		},
 		{
 			name:      "large negative coordinates",
 			outputDir: "out",
 			tile:      dsf.TileCoord{Lat: -33, Lon: -170},
-			want:      filepath.Join("out", "-40-170", "-33-170.dsf"),
+			want:      filepath.Join("out", "Earth nav data", "-40-170", "-33-170.dsf"),
 		},
 	}
 
@@ -67,7 +67,7 @@ func TestEnsureTileDir(t *testing.T) {
 			t.Fatalf("EnsureTileDir() returned unexpected error: %v", err)
 		}
 
-		expectedDir := filepath.Join(tmpDir, "+40+000")
+		expectedDir := filepath.Join(tmpDir, "Earth nav data", "+40+000")
 		info, err := os.Stat(expectedDir)
 		if err != nil {
 			t.Fatalf("expected directory %q does not exist: %v", expectedDir, err)
@@ -86,7 +86,7 @@ func TestEnsureTileDir(t *testing.T) {
 			t.Fatalf("EnsureTileDir() returned unexpected error: %v", err)
 		}
 
-		expectedDir := filepath.Join(tmpDir, "-20-010")
+		expectedDir := filepath.Join(tmpDir, "Earth nav data", "-20-010")
 		info, err := os.Stat(expectedDir)
 		if err != nil {
 			t.Fatalf("expected directory %q does not exist: %v", expectedDir, err)

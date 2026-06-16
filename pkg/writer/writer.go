@@ -48,6 +48,8 @@ func Run(ctx context.Context, cfg Config, in <-chan dsf.BuildingBlock) error {
 	}
 
 write:
+	writtenTiles := make(map[dsf.TileCoord][]dsf.BuildingBlock)
+
 	// Process each tile.
 	for tile, blocks := range tiles {
 		// Check context cancellation before processing each tile.
@@ -82,6 +84,12 @@ write:
 		if err := writeTileFile(cfg.OutputDir, tile, data); err != nil {
 			return err
 		}
+
+		writtenTiles[tile] = blocks
+	}
+
+	if err := writeEarthWEDXML(cfg.OutputDir, writtenTiles); err != nil {
+		return err
 	}
 
 	return nil
