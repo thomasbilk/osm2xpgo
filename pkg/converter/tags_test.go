@@ -36,11 +36,8 @@ func TestClassifyTags_Building(t *testing.T) {
 	if got.Skip {
 		t.Fatal("expected building with 5 nodes to not be skipped")
 	}
-	if got.Block != dsf.BlockPolygon {
-		t.Errorf("expected BlockPolygon, got %v", got.Block)
-	}
-	if got.SubType != PolyGeneric {
-		t.Errorf("expected PolyGeneric subtype, got %v", got.SubType)
+	if got.Block != dsf.BlockFacade {
+		t.Errorf("expected BlockFacade, got %v", got.Block)
 	}
 }
 
@@ -60,8 +57,8 @@ func TestClassifyTags_BuildingExactly4Nodes(t *testing.T) {
 	if got.Skip {
 		t.Fatal("expected building with exactly 4 nodes to not be skipped")
 	}
-	if got.Block != dsf.BlockPolygon {
-		t.Errorf("expected BlockPolygon, got %v", got.Block)
+	if got.Block != dsf.BlockFacade {
+		t.Errorf("expected BlockFacade, got %v", got.Block)
 	}
 }
 
@@ -113,18 +110,85 @@ func TestClassifyTags_LanduseForestTooFewNodes(t *testing.T) {
 	}
 }
 
-func TestClassifyTags_Multipolygon(t *testing.T) {
-	tags := map[string]string{"type": "multipolygon"}
-	got := ClassifyTags(tags, 0) // node count not relevant for relations
+func TestClassifyTags_LanduseFarmland(t *testing.T) {
+	tags := map[string]string{"landuse": "farmland"}
+	got := ClassifyTags(tags, 6)
 
 	if got.Skip {
-		t.Fatal("expected type=multipolygon to not be skipped")
+		t.Fatal("expected landuse=farmland to not be skipped")
 	}
 	if got.Block != dsf.BlockPolygon {
 		t.Errorf("expected BlockPolygon, got %v", got.Block)
 	}
-	if got.SubType != PolyGeneric {
-		t.Errorf("expected PolyGeneric subtype, got %v", got.SubType)
+	if got.SubType != PolyField {
+		t.Errorf("expected PolyField subtype, got %v", got.SubType)
+	}
+}
+
+func TestClassifyTags_LanduseMeadow(t *testing.T) {
+	tags := map[string]string{"landuse": "meadow"}
+	got := ClassifyTags(tags, 5)
+
+	if got.Skip {
+		t.Fatal("expected landuse=meadow to not be skipped")
+	}
+	if got.Block != dsf.BlockPolygon {
+		t.Errorf("expected BlockPolygon, got %v", got.Block)
+	}
+	if got.SubType != PolyField {
+		t.Errorf("expected PolyField subtype, got %v", got.SubType)
+	}
+}
+
+func TestClassifyTags_NaturalGrassland(t *testing.T) {
+	tags := map[string]string{"natural": "grassland"}
+	got := ClassifyTags(tags, 5)
+
+	if got.Skip {
+		t.Fatal("expected natural=grassland to not be skipped")
+	}
+	if got.Block != dsf.BlockPolygon {
+		t.Errorf("expected BlockPolygon, got %v", got.Block)
+	}
+	if got.SubType != PolyField {
+		t.Errorf("expected PolyField subtype, got %v", got.SubType)
+	}
+}
+
+func TestClassifyTags_MultipolygonForest(t *testing.T) {
+	tags := map[string]string{"type": "multipolygon", "natural": "wood"}
+	got := ClassifyTags(tags, 0)
+
+	if got.Skip {
+		t.Fatal("expected multipolygon forest to not be skipped")
+	}
+	if got.Block != dsf.BlockPolygon {
+		t.Errorf("expected BlockPolygon, got %v", got.Block)
+	}
+	if got.SubType != PolyForest {
+		t.Errorf("expected PolyForest subtype, got %v", got.SubType)
+	}
+}
+
+func TestClassifyTags_MultipolygonBuilding(t *testing.T) {
+	tags := map[string]string{"type": "multipolygon", "building": "yes"}
+	got := ClassifyTags(tags, 0)
+
+	if got.Skip {
+		t.Fatal("expected multipolygon building to not be skipped")
+	}
+	if got.Block != dsf.BlockFacade {
+		t.Errorf("expected BlockFacade, got %v", got.Block)
+	}
+}
+
+func TestClassifyTags_MultipolygonGeneric(t *testing.T) {
+	// A multipolygon without recognized inner tags should be skipped.
+	tags := map[string]string{"type": "multipolygon"}
+	got := ClassifyTags(tags, 0)
+
+	if !got.Skip {
+		t.Fatal("expected generic multipolygon without recognized tags to be skipped")
 	}
 }
 

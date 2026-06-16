@@ -100,7 +100,7 @@ func tileOverlapsBBox(tile dsf.TileCoord, bbox *BoundingBox) bool {
 
 // assembleDSF builds the complete DSF binary for a tile from its building blocks.
 func assembleDSF(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, error) {
-	// Build HEAD atom with PROP sub-atom.
+	// Build HEAD atom with PROP sub-atom (including overlay property).
 	headAtom := buildHEAD(tile)
 
 	// Build DEFN atom with definition sub-atoms.
@@ -135,7 +135,8 @@ func assembleDSF(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, error)
 	return buf, nil
 }
 
-// buildHEAD constructs the HEAD atom containing a PROP sub-atom with tile boundary properties.
+// buildHEAD constructs the HEAD atom containing a PROP sub-atom with tile boundary
+// properties and the overlay flag.
 func buildHEAD(tile dsf.TileCoord) []byte {
 	west := strconv.Itoa(tile.Lon)
 	east := strconv.Itoa(tile.Lon + 1)
@@ -143,10 +144,12 @@ func buildHEAD(tile dsf.TileCoord) []byte {
 	north := strconv.Itoa(tile.Lat + 1)
 
 	// PROP string table: null-terminated key-value pairs.
+	// sim/overlay=1 marks this as an overlay DSF that layers on top of base scenery.
 	propPayload := "sim/west\x00" + west + "\x00" +
 		"sim/east\x00" + east + "\x00" +
 		"sim/south\x00" + south + "\x00" +
-		"sim/north\x00" + north + "\x00"
+		"sim/north\x00" + north + "\x00" +
+		"sim/overlay\x001\x00"
 
 	propAtom := EncodeAtom(dsf.AtomPROP, []byte(propPayload))
 	return BuildAtom(dsf.AtomHEAD, propAtom)
@@ -155,7 +158,7 @@ func buildHEAD(tile dsf.TileCoord) []byte {
 // defMapping holds the index mapping for a definition type.
 type defMapping struct {
 	netw map[string]uint16 // DefPath → index for network defs
-	poly map[string]uint16 // DefPath → index for polygon defs
+	poly map[string]uint16 // DefPath → index for polygon defs (includes facades)
 	objt map[string]uint16 // DefPath → index for object defs
 	tert map[string]uint16 // DefPath → index for terrain defs
 }
@@ -182,7 +185,8 @@ func buildDEFN(blocks []dsf.BuildingBlock) ([]byte, defMapping) {
 				dm.netw[b.DefPath] = uint16(len(netwDefs))
 				netwDefs = append(netwDefs, b.DefPath)
 			}
-		case dsf.BlockPolygon:
+		case dsf.BlockPolygon, dsf.BlockFacade:
+			// Both polygons and facades use the POLY definition table in DSF.
 			if _, exists := dm.poly[b.DefPath]; !exists {
 				dm.poly[b.DefPath] = uint16(len(polyDefs))
 				polyDefs = append(polyDefs, b.DefPath)
@@ -222,13 +226,12 @@ func encodeDefTable(defs []string) []byte {
 // Returns the GEOD atom bytes and coordinate-to-index mappings for both pool types.
 func buildGEOD(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, map[int][]uint16, map[int][]uint16) {
 	// Separate coordinates by pool type:
-	// - Polygons/Objects → 16-bit POOL
-	// - Vectors → 32-bit PO32
+	// - Polygons/Facades/Objects → 16-bit POOL
+	// - Vectors → 32-bit PO32 (roads need higher precision + junction ID plane)
 	var poolCoords []dsf.Coordinate
 	var pool32Coords []dsf.Coordinate
 
 	// Track which block indices map to which pool index ranges.
-	// poolCoordMap[blockIndex] = slice of point pool indices for that block's coords
 	poolCoordMap := make(map[int][]uint16)
 	pool32CoordMap := make(map[int][]uint16)
 
@@ -244,7 +247,7 @@ func buildGEOD(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, map[int]
 			pool32CoordMap[i] = indices
 			pool32Coords = append(pool32Coords, coords...)
 
-		case dsf.BlockPolygon:
+		case dsf.BlockPolygon, dsf.BlockFacade:
 			if len(b.Windings) > 0 {
 				// Multipolygon with windings.
 				var allIndices []uint16
@@ -257,7 +260,7 @@ func buildGEOD(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, map[int]
 				}
 				poolCoordMap[i] = allIndices
 			} else {
-				// Simple polygon with Coords.
+				// Simple polygon/facade with Coords.
 				startIdx := uint16(len(poolCoords))
 				indices := make([]uint16, len(b.Coords))
 				for j := range b.Coords {
@@ -280,7 +283,7 @@ func buildGEOD(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, map[int]
 
 	var children [][]byte
 
-	// Encode 16-bit point pool if we have polygon/object coordinates.
+	// Encode 16-bit point pool if we have polygon/facade/object coordinates.
 	if len(poolCoords) > 0 {
 		poolAtom, scalAtom := EncodePointPool(tile, poolCoords)
 		children = append(children, poolAtom, scalAtom)
@@ -325,14 +328,14 @@ func buildCMDS(blocks []dsf.BuildingBlock, dm defMapping, poolCoordMap, pool32Co
 			indices := pool32CoordMap[i]
 			payload = append(payload, EncodeNetworkChain(indices)...)
 
-		case dsf.BlockPolygon:
+		case dsf.BlockPolygon, dsf.BlockFacade:
 			// Select 16-bit pool if not already selected.
 			if currentPool != 0 {
 				payload = append(payload, EncodePoolSelect(pool16Idx)...)
 				currentPool = 0
 			}
 
-			// Set definition.
+			// Set definition (both polygons and facades use the POLY table).
 			defIdx := dm.poly[b.DefPath]
 			payload = append(payload, EncodeSetDefinition(defIdx)...)
 
@@ -354,7 +357,7 @@ func buildCMDS(blocks []dsf.BuildingBlock, dm defMapping, poolCoordMap, pool32Co
 					offset += windingLen
 				}
 			} else {
-				// Simple polygon.
+				// Simple polygon or facade.
 				indices := poolCoordMap[i]
 				payload = append(payload, EncodePolygon(b.Param, indices)...)
 			}
@@ -373,7 +376,6 @@ func buildCMDS(blocks []dsf.BuildingBlock, dm defMapping, poolCoordMap, pool32Co
 			// Place object at first coordinate.
 			indices := poolCoordMap[i]
 			if len(indices) > 0 {
-				// Object placement uses the first coordinate index.
 				buf := make([]byte, 3)
 				buf[0] = dsf.CmdObject
 				binary.LittleEndian.PutUint16(buf[1:3], indices[0])

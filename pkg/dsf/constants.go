@@ -41,6 +41,11 @@ const (
 	CmdPolygonWinding uint8 = 17 // Begin new polygon winding
 )
 
+// DSF definition atom IDs for the DEFN sub-atoms.
+const (
+	AtomFACE uint32 = 0x45434146 // "FACE" — facade definitions (not a standard atom; facades are in POLY)
+)
+
 // Cookie is the 8-byte file header literal identifying a valid DSF file.
 var Cookie = [8]byte{'X', 'P', 'L', 'N', 'E', 'D', 'S', 'F'}
 

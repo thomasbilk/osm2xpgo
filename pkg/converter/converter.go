@@ -104,8 +104,8 @@ func processWay(ctx context.Context, way *osm.Way, nodeIndex map[osm.NodeID]dsf.
 		return nil
 	}
 
-	// For polygons, enforce CCW winding order.
-	if classification.Block == dsf.BlockPolygon {
+	// For polygons and facades, enforce CCW winding order.
+	if classification.Block == dsf.BlockPolygon || classification.Block == dsf.BlockFacade {
 		coords = EnsureCCW(coords)
 	}
 
@@ -135,8 +135,6 @@ func processRelation(ctx context.Context, rel *osm.Relation, nodeIndex map[osm.N
 
 	// Only process multipolygon relations.
 	if tags["type"] != "multipolygon" {
-		// Classify non-multipolygon relations as well — they might match other tags.
-		// However, per the spec, only multipolygon relations produce building blocks.
 		return nil
 	}
 
@@ -231,72 +229,149 @@ func resolveWayNodes(nodes []osm.WayNode, nodeIndex map[osm.NodeID]dsf.Coordinat
 func populateDefinitionFields(block *dsf.BuildingBlock, classification Classification, tags map[string]string) {
 	switch classification.Block {
 	case dsf.BlockVector:
-		block.DefPath = vectorDefPath(tags)
+		block.DefPath = vectorDefPath()
 		block.SubType = vectorSubType(tags)
 
 	case dsf.BlockPolygon:
-		block.DefPath = polygonDefPath(classification, tags)
-		block.Param = polygonParam(tags)
+		block.DefPath = polygonDefPath(classification)
+		block.Param = polygonParam(classification, tags)
+
+	case dsf.BlockFacade:
+		block.DefPath = facadeDefPath(tags)
+		block.Param = facadeHeight(tags)
 
 	case dsf.BlockObject:
-		block.DefPath = "objects/default.obj"
+		block.DefPath = "lib/g10/objects/default.obj"
 	}
 }
 
-func vectorDefPath(tags map[string]string) string {
-	switch tags["highway"] {
-	case "motorway", "trunk":
-		return "roads/highway_major.net"
-	case "primary", "secondary", "tertiary":
-		return "roads/highway.net"
-	case "residential", "service", "living_street":
-		return "roads/street.net"
-	case "footway", "path", "cycleway", "track":
-		return "roads/path.net"
-	default:
-		return "roads/default.net"
-	}
+// vectorDefPath returns the X-Plane road network definition path.
+// X-Plane uses a single .net file per DSF with subtypes for different road classes.
+func vectorDefPath() string {
+	// X-Plane's default road network from the built-in library.
+	return "lib/g10/roads.net"
 }
 
+// vectorSubType maps OSM highway tags to X-Plane road subtypes.
+// These subtypes correspond to visual styles defined in the .net file:
+//
+//	1 = highway/motorway (wide, divided)
+//	2 = primary/trunk road
+//	3 = secondary/tertiary road
+//	4 = residential/local street
+//	5 = service/track
+//	6 = footway/path/cycleway
 func vectorSubType(tags map[string]string) uint8 {
 	switch tags["highway"] {
-	case "motorway", "trunk":
-		return 3
-	case "primary", "secondary", "tertiary":
-		return 2
-	case "residential", "service", "living_street":
+	case "motorway", "motorway_link":
 		return 1
-	case "footway", "path", "cycleway", "track":
+	case "trunk", "trunk_link":
+		return 2
+	case "primary", "primary_link":
+		return 3
+	case "secondary", "secondary_link":
 		return 4
+	case "tertiary", "tertiary_link":
+		return 5
+	case "residential", "living_street", "unclassified":
+		return 6
+	case "service":
+		return 7
+	case "track":
+		return 8
+	case "footway", "path", "cycleway", "pedestrian", "steps":
+		return 9
+	default:
+		return 6 // Default to residential
+	}
+}
+
+// polygonDefPath returns the definition path for polygon features.
+func polygonDefPath(classification Classification) string {
+	switch classification.SubType {
+	case PolyForest:
+		// X-Plane forest definition — uses the default deciduous/mixed forest.
+		return "lib/g10/forests/autogen_tree.for"
+	case PolyField:
+		// Draped polygon for agricultural/grass areas.
+		return "lib/g10/terrain10/apt_grass.pol"
+	default:
+		return "lib/g10/terrain10/apt_grass.pol"
+	}
+}
+
+// polygonParam returns the polygon parameter value.
+// For forests: density 0-255 (we use 200 for good coverage).
+// For draped polygons (.pol): texture heading in degrees (0).
+func polygonParam(classification Classification, tags map[string]string) uint16 {
+	switch classification.SubType {
+	case PolyForest:
+		// Forest density: 200 out of 255 for realistic coverage.
+		// The fill mode is encoded in upper bits: 0=solid fill.
+		return 200
+	case PolyField:
+		// Draped polygon heading: 0 degrees.
+		return 0
 	default:
 		return 0
 	}
 }
 
-func polygonDefPath(classification Classification, tags map[string]string) string {
-	if classification.SubType == PolyForest {
-		return "polygons/forest.pol"
+// facadeDefPath returns the facade definition path for buildings.
+// X-Plane uses .fac files for extruded buildings.
+func facadeDefPath(tags map[string]string) string {
+	// Choose facade type based on building characteristics.
+	buildingType := tags["building"]
+	switch buildingType {
+	case "industrial", "warehouse":
+		return "lib/g10/autogen/Industrial_1.fac"
+	case "commercial", "retail", "office":
+		return "lib/g10/autogen/OfficeMed_1.fac"
+	case "church", "cathedral", "chapel":
+		return "lib/g10/autogen/Church_1.fac"
+	case "residential", "apartments", "house", "detached", "terrace":
+		return "lib/g10/autogen/ResLo_1.fac"
+	default:
+		// Generic building facade.
+		return "lib/g10/autogen/ResLo_1.fac"
 	}
-
-	if _, ok := tags["building"]; ok {
-		return "polygons/building.pol"
-	}
-
-	return "polygons/area.pol"
 }
 
-func polygonParam(tags map[string]string) uint16 {
-	levelsStr, ok := tags["building:levels"]
-	if !ok {
-		return 0
+// facadeHeight returns the height parameter for a building facade in meters.
+// The param for facades encodes the building height.
+func facadeHeight(tags map[string]string) uint16 {
+	// Try building:levels first.
+	if levelsStr, ok := tags["building:levels"]; ok {
+		if levels, err := strconv.Atoi(levelsStr); err == nil && levels > 0 {
+			height := levels * 3 // Approximate 3 meters per floor.
+			if height > 200 {
+				height = 200
+			}
+			return uint16(height)
+		}
 	}
-	levels, err := strconv.Atoi(levelsStr)
-	if err != nil || levels < 0 {
-		return 0
+
+	// Try explicit height tag.
+	if heightStr, ok := tags["height"]; ok {
+		if h, err := strconv.ParseFloat(heightStr, 64); err == nil && h > 0 {
+			if h > 200 {
+				h = 200
+			}
+			return uint16(h)
+		}
 	}
-	height := levels * 3
-	if height > int(^uint16(0)) {
-		return ^uint16(0)
+
+	// Default height based on building type.
+	switch tags["building"] {
+	case "industrial", "warehouse":
+		return 8
+	case "commercial", "office":
+		return 15
+	case "apartments":
+		return 18
+	case "church", "cathedral":
+		return 20
+	default:
+		return 9 // ~3 floors for generic residential
 	}
-	return uint16(height)
 }

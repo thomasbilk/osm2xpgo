@@ -12,8 +12,9 @@ type BlockType uint8
 
 const (
 	BlockVector  BlockType = iota // Road/path network segment
-	BlockPolygon                  // Building, forest, or other polygon
+	BlockPolygon                  // Forest, draped polygon (fields, etc.)
 	BlockObject                   // Placed 3D object
+	BlockFacade                   // Extruded building facade
 )
 
 // TileCoord represents the south-west corner of a 1×1 degree tile
@@ -55,16 +56,16 @@ type Coordinate struct {
 }
 
 // BuildingBlock is the pipeline element sent from the Converter to the Writer.
-// It represents a single DSF feature (vector, polygon, or object) assigned to
+// It represents a single DSF feature (vector, polygon, facade, or object) assigned to
 // a specific tile.
 type BuildingBlock struct {
-	Type     BlockType         // Vector, Polygon, or Object
+	Type     BlockType         // Vector, Polygon, Facade, or Object
 	Tile     TileCoord         // Assigned 1×1 degree tile
 	Coords   []Coordinate      // WGS84 coordinates (lon, lat, optional elevation)
 	Windings [][]Coordinate    // For multipolygons: outer + inner windings
 	DefIndex int               // Index into definition table
-	DefPath  string            // Definition file path (e.g., "roads/highway.net")
+	DefPath  string            // Definition file path (e.g., "lib/g10/roads.net")
 	SubType  uint8             // Road subtype for vectors
-	Param    uint16            // Polygon parameter (height, density)
+	Param    uint16            // Polygon parameter: density (0-255) for forests, heading for .pol, height for facades
 	Tags     map[string]string // Original OSM tags for metadata
 }

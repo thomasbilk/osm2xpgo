@@ -50,26 +50,41 @@ func TestPopulateDefinitionFields_Vector(t *testing.T) {
 	if b.DefPath == "" {
 		t.Fatal("expected non-empty DefPath for vector")
 	}
-	if b.DefPath != "roads/highway.net" {
+	if b.DefPath != "lib/g10/roads.net" {
 		t.Fatalf("unexpected DefPath: %q", b.DefPath)
 	}
-	if b.SubType != 2 {
-		t.Fatalf("unexpected SubType: %d", b.SubType)
+	if b.SubType != 3 {
+		t.Fatalf("unexpected SubType for primary: %d (expected 3)", b.SubType)
 	}
 }
 
-func TestPopulateDefinitionFields_PolygonBuildingLevels(t *testing.T) {
-	b := dsf.BuildingBlock{Type: dsf.BlockPolygon}
-	class := Classification{Block: dsf.BlockPolygon, SubType: PolyGeneric}
+func TestPopulateDefinitionFields_Facade(t *testing.T) {
+	b := dsf.BuildingBlock{Type: dsf.BlockFacade}
+	class := Classification{Block: dsf.BlockFacade, SubType: PolyGeneric}
 	tags := map[string]string{"building": "yes", "building:levels": "5"}
 
 	populateDefinitionFields(&b, class, tags)
 
-	if b.DefPath != "polygons/building.pol" {
+	if b.DefPath != "lib/g10/autogen/ResLo_1.fac" {
 		t.Fatalf("unexpected DefPath: %q", b.DefPath)
 	}
 	if b.Param != 15 {
-		t.Fatalf("unexpected Param: %d", b.Param)
+		t.Fatalf("unexpected Param (height): %d (expected 15 for 5 levels)", b.Param)
+	}
+}
+
+func TestPopulateDefinitionFields_FacadeIndustrial(t *testing.T) {
+	b := dsf.BuildingBlock{Type: dsf.BlockFacade}
+	class := Classification{Block: dsf.BlockFacade, SubType: PolyGeneric}
+	tags := map[string]string{"building": "industrial"}
+
+	populateDefinitionFields(&b, class, tags)
+
+	if b.DefPath != "lib/g10/autogen/Industrial_1.fac" {
+		t.Fatalf("unexpected DefPath: %q", b.DefPath)
+	}
+	if b.Param != 8 {
+		t.Fatalf("unexpected default height for industrial: %d (expected 8)", b.Param)
 	}
 }
 
@@ -80,11 +95,54 @@ func TestPopulateDefinitionFields_PolygonForest(t *testing.T) {
 
 	populateDefinitionFields(&b, class, tags)
 
-	if b.DefPath != "polygons/forest.pol" {
+	if b.DefPath != "lib/g10/forests/autogen_tree.for" {
+		t.Fatalf("unexpected DefPath: %q", b.DefPath)
+	}
+	if b.Param != 200 {
+		t.Fatalf("unexpected Param (density): %d (expected 200)", b.Param)
+	}
+}
+
+func TestPopulateDefinitionFields_PolygonField(t *testing.T) {
+	b := dsf.BuildingBlock{Type: dsf.BlockPolygon}
+	class := Classification{Block: dsf.BlockPolygon, SubType: PolyField}
+	tags := map[string]string{"landuse": "farmland"}
+
+	populateDefinitionFields(&b, class, tags)
+
+	if b.DefPath != "lib/g10/terrain10/apt_grass.pol" {
 		t.Fatalf("unexpected DefPath: %q", b.DefPath)
 	}
 	if b.Param != 0 {
-		t.Fatalf("unexpected Param: %d", b.Param)
+		t.Fatalf("unexpected Param (heading): %d (expected 0)", b.Param)
+	}
+}
+
+func TestVectorSubType_RoadClassification(t *testing.T) {
+	tests := []struct {
+		highway  string
+		expected uint8
+	}{
+		{"motorway", 1},
+		{"motorway_link", 1},
+		{"trunk", 2},
+		{"primary", 3},
+		{"secondary", 4},
+		{"tertiary", 5},
+		{"residential", 6},
+		{"service", 7},
+		{"track", 8},
+		{"footway", 9},
+		{"path", 9},
+		{"cycleway", 9},
+	}
+
+	for _, tt := range tests {
+		tags := map[string]string{"highway": tt.highway}
+		got := vectorSubType(tags)
+		if got != tt.expected {
+			t.Errorf("highway=%s: expected subtype %d, got %d", tt.highway, tt.expected, got)
+		}
 	}
 }
 
