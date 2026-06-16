@@ -28,7 +28,7 @@ func Run(ctx context.Context, inputPath string, out chan<- osm.Object) error {
 	defer scanner.Close()
 
 	for scanner.Scan() {
-		obj := scanner.Object()
+		obj := cloneObject(scanner.Object())
 
 		select {
 		case <-ctx.Done():
@@ -46,4 +46,45 @@ func Run(ctx context.Context, inputPath string, out chan<- osm.Object) error {
 	}
 
 	return nil
+}
+
+func cloneObject(obj osm.Object) osm.Object {
+	switch o := obj.(type) {
+	case *osm.Node:
+		c := *o
+		if len(o.Tags) > 0 {
+			c.Tags = append(osm.Tags(nil), o.Tags...)
+		}
+		return &c
+
+	case *osm.Way:
+		c := *o
+		if len(o.Tags) > 0 {
+			c.Tags = append(osm.Tags(nil), o.Tags...)
+		}
+		if len(o.Nodes) > 0 {
+			c.Nodes = append([]osm.WayNode(nil), o.Nodes...)
+		}
+		return &c
+
+	case *osm.Relation:
+		c := *o
+		if len(o.Tags) > 0 {
+			c.Tags = append(osm.Tags(nil), o.Tags...)
+		}
+		if len(o.Members) > 0 {
+			members := make([]osm.Member, len(o.Members))
+			for i := range o.Members {
+				members[i] = o.Members[i]
+				if len(o.Members[i].Nodes) > 0 {
+					members[i].Nodes = append([]osm.WayNode(nil), o.Members[i].Nodes...)
+				}
+			}
+			c.Members = members
+		}
+		return &c
+
+	default:
+		return obj
+	}
 }

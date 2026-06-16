@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -110,5 +111,42 @@ func TestRunDumpNonexistentFile(t *testing.T) {
 	code := run([]string{"--dump", "nonexistent.dsf"})
 	if code != 1 {
 		t.Errorf("run --dump nonexistent = %d, want 1", code)
+	}
+}
+
+func TestRunMonacoWritesExpectedGeoTile(t *testing.T) {
+	tmp := t.TempDir()
+	input := filepath.Join("..", "..", "monaco-260615.osm.pbf")
+	code := run([]string{input, tmp})
+	if code != 0 {
+		t.Fatalf("run(monaco) = %d, want 0", code)
+	}
+
+	var foundDSF string
+	err := filepath.Walk(tmp, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(path), ".dsf") {
+			foundDSF = path
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking output dir: %v", err)
+	}
+	if foundDSF == "" {
+		t.Fatal("expected at least one DSF output file")
+	}
+
+	rel, err := filepath.Rel(tmp, foundDSF)
+	if err != nil {
+		t.Fatalf("filepath.Rel failed: %v", err)
+	}
+	if strings.Contains(rel, "+00+000") {
+		t.Fatalf("expected non-zero geo tile for Monaco input, got %q", rel)
 	}
 }
