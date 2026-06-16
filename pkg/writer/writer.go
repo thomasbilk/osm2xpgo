@@ -107,10 +107,10 @@ func assembleDSF(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, error)
 	defnAtom, defMap := buildDEFN(blocks)
 
 	// Build GEOD atom with point pools.
-	geodAtom, poolCoordMap, pool32CoordMap := buildGEOD(tile, blocks)
+	geodAtom, poolCoordMap, pool32CoordMap, pool16Idx, pool32Idx := buildGEOD(tile, blocks)
 
 	// Build CMDS atom with command opcodes.
-	cmdsAtom := buildCMDS(blocks, defMap, poolCoordMap, pool32CoordMap)
+	cmdsAtom := buildCMDS(blocks, defMap, poolCoordMap, pool32CoordMap, pool16Idx, pool32Idx)
 
 	// Assemble cookie + version + atoms.
 	var buf []byte
@@ -223,8 +223,9 @@ func encodeDefTable(defs []string) []byte {
 }
 
 // buildGEOD constructs the GEOD atom with POOL/SCAL (16-bit) and PO32/SC32 (32-bit) sub-atoms.
-// Returns the GEOD atom bytes and coordinate-to-index mappings for both pool types.
-func buildGEOD(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, map[int][]uint16, map[int][]uint16) {
+// Returns the GEOD atom bytes, coordinate-to-index mappings, and the actual
+// pool indices used for 16-bit and 32-bit pools in CMDS pool-select commands.
+func buildGEOD(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, map[int][]uint16, map[int][]uint16, uint16, uint16) {
 	// Separate coordinates by pool type:
 	// - Polygons/Facades/Objects → 16-bit POOL
 	// - Vectors → 32-bit PO32 (roads need higher precision + junction ID plane)
@@ -282,35 +283,45 @@ func buildGEOD(tile dsf.TileCoord, blocks []dsf.BuildingBlock) ([]byte, map[int]
 	}
 
 	var children [][]byte
+	var nextPoolIdx uint16
+	const invalidPoolIdx uint16 = 0xFFFF
+	pool16Idx := invalidPoolIdx
+	pool32Idx := invalidPoolIdx
 
 	// Encode 16-bit point pool if we have polygon/facade/object coordinates.
 	if len(poolCoords) > 0 {
+		pool16Idx = nextPoolIdx
+		nextPoolIdx++
 		poolAtom, scalAtom := EncodePointPool(tile, poolCoords)
 		children = append(children, poolAtom, scalAtom)
 	}
 
 	// Encode 32-bit point pool if we have vector coordinates.
 	if len(pool32Coords) > 0 {
+		pool32Idx = nextPoolIdx
+		nextPoolIdx++
 		po32Atom, sc32Atom := EncodePointPool32(tile, pool32Coords)
 		children = append(children, po32Atom, sc32Atom)
 	}
 
 	geodAtom := BuildAtom(dsf.AtomGEOD, children...)
-	return geodAtom, poolCoordMap, pool32CoordMap
+	return geodAtom, poolCoordMap, pool32CoordMap, pool16Idx, pool32Idx
 }
 
 // buildCMDS constructs the CMDS atom with command opcodes for all building blocks.
-func buildCMDS(blocks []dsf.BuildingBlock, dm defMapping, poolCoordMap, pool32CoordMap map[int][]uint16) []byte {
+func buildCMDS(blocks []dsf.BuildingBlock, dm defMapping, poolCoordMap, pool32CoordMap map[int][]uint16, pool16Idx, pool32Idx uint16) []byte {
 	var payload []byte
 
 	// Track current state to minimize redundant commands.
 	var currentPool int = -1 // -1 means no pool selected yet
-	const pool16Idx uint16 = 0
-	const pool32Idx uint16 = 1
+	const invalidPoolIdx uint16 = 0xFFFF
 
 	for i, b := range blocks {
 		switch b.Type {
 		case dsf.BlockVector:
+			if pool32Idx == invalidPoolIdx {
+				continue
+			}
 			// Select 32-bit pool if not already selected.
 			if currentPool != 1 {
 				payload = append(payload, EncodePoolSelect(pool32Idx)...)
@@ -329,6 +340,9 @@ func buildCMDS(blocks []dsf.BuildingBlock, dm defMapping, poolCoordMap, pool32Co
 			payload = append(payload, EncodeNetworkChain(indices)...)
 
 		case dsf.BlockPolygon, dsf.BlockFacade:
+			if pool16Idx == invalidPoolIdx {
+				continue
+			}
 			// Select 16-bit pool if not already selected.
 			if currentPool != 0 {
 				payload = append(payload, EncodePoolSelect(pool16Idx)...)
@@ -363,6 +377,9 @@ func buildCMDS(blocks []dsf.BuildingBlock, dm defMapping, poolCoordMap, pool32Co
 			}
 
 		case dsf.BlockObject:
+			if pool16Idx == invalidPoolIdx {
+				continue
+			}
 			// Select 16-bit pool if not already selected.
 			if currentPool != 0 {
 				payload = append(payload, EncodePoolSelect(pool16Idx)...)
