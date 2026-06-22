@@ -11,8 +11,8 @@ import (
 
 // writeTextDSF writes a DSF text file (.dsf.txt) for the given tile and its building blocks.
 // This format is human-readable and can be compiled to binary DSF using X-Plane's DSFTool.
-func writeTextDSF(outputDir string, tile dsf.TileCoord, blocks []dsf.BuildingBlock) error {
-	path := TileOutputPath(outputDir, tile)
+func writeTextDSF(cfg Config, tile dsf.TileCoord, blocks []dsf.BuildingBlock) error {
+	path := TileOutputPath(cfg.OutputDir, tile)
 	path += ".txt" // Append .txt to produce e.g. +43+007.dsf.txt
 
 	dir := filepath.Dir(path)
@@ -35,7 +35,40 @@ func writeTextDSF(outputDir string, tile dsf.TileCoord, blocks []dsf.BuildingBlo
 	// Properties.
 	fmt.Fprintln(f, "PROPERTY sim/planet earth")
 	fmt.Fprintln(f, "PROPERTY sim/overlay 1")
-	fmt.Fprintf(f, "PROPERTY sim/creation_agent osm2xpgo\n")
+	fmt.Fprintln(f, "PROPERTY sim/creation_agent osm2xpgo")
+
+	// Render level requirements.
+	objLevel := cfg.ObjectRenderLevel
+	if objLevel <= 0 {
+		objLevel = 1
+	}
+	facLevel := cfg.FacadeRenderLevel
+	if facLevel <= 0 {
+		facLevel = 1
+	}
+	fmt.Fprintf(f, "PROPERTY sim/require_object %d/0\n", objLevel)
+	fmt.Fprintf(f, "PROPERTY sim/require_facade %d/0\n", facLevel)
+
+	// Exclusion zones: tell X-Plane to remove default autogen in this tile area.
+	west := fmt.Sprintf("%d.000000000", tile.Lon)
+	south := fmt.Sprintf("%d.000000000", tile.Lat)
+	east := fmt.Sprintf("%d.000000000", tile.Lon+1)
+	north := fmt.Sprintf("%d.000000000", tile.Lat+1)
+	excludeBox := west + "/" + south + "/" + east + "/" + north
+
+	if cfg.ExcludeObj {
+		fmt.Fprintf(f, "PROPERTY sim/exclude_obj %s\n", excludeBox)
+	}
+	if cfg.ExcludeFac {
+		fmt.Fprintf(f, "PROPERTY sim/exclude_fac %s\n", excludeBox)
+	}
+	if cfg.ExcludeFor {
+		fmt.Fprintf(f, "PROPERTY sim/exclude_for %s\n", excludeBox)
+	}
+	if cfg.ExcludeNet {
+		fmt.Fprintf(f, "PROPERTY sim/exclude_net %s\n", excludeBox)
+	}
+
 	fmt.Fprintf(f, "PROPERTY sim/west %d\n", tile.Lon)
 	fmt.Fprintf(f, "PROPERTY sim/east %d\n", tile.Lon+1)
 	fmt.Fprintf(f, "PROPERTY sim/south %d\n", tile.Lat)

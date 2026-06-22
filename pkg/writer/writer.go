@@ -16,6 +16,18 @@ type Config struct {
 	TileFilter *dsf.TileCoord // Optional: produce only this tile
 	BBoxFilter *BoundingBox   // Optional: produce only overlapping tiles
 	TextMode   bool           // If true, write DSF text format (.dsf.txt) instead of binary
+
+	// X-Plane rendering level properties (0-5, higher = more detail required).
+	// These control the minimum rendering settings required to see objects/facades.
+	ObjectRenderLevel int // sim/require_object level (default 1)
+	FacadeRenderLevel int // sim/require_facade level (default 1)
+
+	// Exclusion flags: when true, the DSF will contain sim/exclude_* properties
+	// that tell X-Plane to remove default autogen in the overlay area.
+	ExcludeObj bool // Exclude default objects
+	ExcludeFac bool // Exclude default facades
+	ExcludeFor bool // Exclude default forests
+	ExcludeNet bool // Exclude default road networks
 }
 
 // BoundingBox defines a geographic rectangle in WGS84 degrees.
@@ -78,7 +90,7 @@ write:
 
 		// Write DSF output for this tile (text or binary).
 		if cfg.TextMode {
-			if err := writeTextDSF(cfg.OutputDir, tile, blocks); err != nil {
+			if err := writeTextDSF(cfg, tile, blocks); err != nil {
 				return fmt.Errorf("writing DSF text for tile %+v: %w", tile, err)
 			}
 		} else {
