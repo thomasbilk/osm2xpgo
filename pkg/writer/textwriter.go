@@ -68,6 +68,18 @@ func writeTextDSF(cfg Config, tile dsf.TileCoord, blocks []dsf.BuildingBlock) er
 	if cfg.ExcludeNet {
 		fmt.Fprintf(f, "PROPERTY sim/exclude_net %s\n", excludeBox)
 	}
+	if cfg.ExcludePol {
+		fmt.Fprintf(f, "PROPERTY sim/exclude_pol %s\n", excludeBox)
+	}
+	if cfg.ExcludeLin {
+		fmt.Fprintf(f, "PROPERTY sim/exclude_lin %s\n", excludeBox)
+	}
+	if cfg.ExcludeStr {
+		fmt.Fprintf(f, "PROPERTY sim/exclude_str %s\n", excludeBox)
+	}
+	if cfg.ExcludeBch {
+		fmt.Fprintf(f, "PROPERTY sim/exclude_bch %s\n", excludeBox)
+	}
 
 	fmt.Fprintf(f, "PROPERTY sim/west %d\n", tile.Lon)
 	fmt.Fprintf(f, "PROPERTY sim/east %d\n", tile.Lon+1)

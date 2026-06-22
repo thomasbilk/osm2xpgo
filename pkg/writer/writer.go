@@ -24,10 +24,29 @@ type Config struct {
 
 	// Exclusion flags: when true, the DSF will contain sim/exclude_* properties
 	// that tell X-Plane to remove default autogen in the overlay area.
-	ExcludeObj bool // Exclude default objects
-	ExcludeFac bool // Exclude default facades
-	ExcludeFor bool // Exclude default forests
-	ExcludeNet bool // Exclude default road networks
+	// Exclusions prevent duplication between your custom scenery and the defaults.
+	ExcludeObj bool // Exclude default placed objects (autogen trees, lights, etc.)
+	ExcludeFac bool // Exclude default building facades
+	ExcludeFor bool // Exclude default forest polygons
+	ExcludeNet bool // Exclude default road/path networks
+	ExcludePol bool // Exclude default draped polygons
+	ExcludeLin bool // Exclude default line markings
+	ExcludeStr bool // Exclude default string objects (power lines, etc.)
+	ExcludeBch bool // Exclude default beach polygons
+}
+
+// DefaultConfig returns a Config with sensible exclusion defaults.
+// By default, objects, forests, facades, and networks are excluded since osm2xpgo
+// generates all of these feature types from OSM data.
+func DefaultConfig() Config {
+	return Config{
+		ObjectRenderLevel: 1,
+		FacadeRenderLevel: 1,
+		ExcludeObj:        true,
+		ExcludeFor:        true,
+		ExcludeFac:        true,
+		ExcludeNet:        true,
+	}
 }
 
 // BoundingBox defines a geographic rectangle in WGS84 degrees.

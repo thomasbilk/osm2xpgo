@@ -19,11 +19,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const usage = `Usage: osm2xpgo [--dump <file.dsf>] [--text] <input.osm.pbf> [output_dir]
+const usage = `Usage: osm2xpgo [--dump <file.dsf>] [--text] [--exclude=TYPES] [--no-exclude] <input.osm.pbf> [output_dir]
 
 Options:
-  --dump <file>  Parse and display DSF file structure
-  --text         Output DSF text format (.dsf.txt) instead of binary
+  --dump <file>      Parse and display DSF file structure
+  --text             Output DSF text format (.dsf.txt) instead of binary
+  --exclude=TYPES    Comma-separated exclusion types to enable (obj,fac,for,net,pol,lin,str,bch)
+                     Default: obj,fac,for,net (excludes objects, facades, forests, and networks)
+  --no-exclude       Disable all exclusion zones (for testing)
 `
 
 func main() {
@@ -51,11 +54,17 @@ func run(args []string) int {
 
 	// Convert mode: parse flags and positional arguments.
 	textMode := false
+	noExclude := false
+	excludeOverride := ""
 	var positional []string
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--text":
+		switch {
+		case args[i] == "--text":
 			textMode = true
+		case args[i] == "--no-exclude":
+			noExclude = true
+		case strings.HasPrefix(args[i], "--exclude="):
+			excludeOverride = strings.TrimPrefix(args[i], "--exclude=")
 		default:
 			positional = append(positional, args[i])
 		}
@@ -105,9 +114,52 @@ func run(args []string) int {
 		return converter.Run(gCtx, readerCh, converterCh)
 	})
 
-	writerCfg := writer.Config{
-		OutputDir: outputDir,
-		TextMode:  textMode,
+	writerCfg := writer.DefaultConfig()
+	writerCfg.OutputDir = outputDir
+	writerCfg.TextMode = textMode
+
+	// Apply exclusion overrides.
+	if noExclude {
+		writerCfg.ExcludeObj = false
+		writerCfg.ExcludeFac = false
+		writerCfg.ExcludeFor = false
+		writerCfg.ExcludeNet = false
+		writerCfg.ExcludePol = false
+		writerCfg.ExcludeLin = false
+		writerCfg.ExcludeStr = false
+		writerCfg.ExcludeBch = false
+	} else if excludeOverride != "" {
+		// Reset all exclusions, then enable only those specified.
+		writerCfg.ExcludeObj = false
+		writerCfg.ExcludeFac = false
+		writerCfg.ExcludeFor = false
+		writerCfg.ExcludeNet = false
+		writerCfg.ExcludePol = false
+		writerCfg.ExcludeLin = false
+		writerCfg.ExcludeStr = false
+		writerCfg.ExcludeBch = false
+		for _, t := range strings.Split(excludeOverride, ",") {
+			switch strings.TrimSpace(t) {
+			case "obj":
+				writerCfg.ExcludeObj = true
+			case "fac":
+				writerCfg.ExcludeFac = true
+			case "for":
+				writerCfg.ExcludeFor = true
+			case "net":
+				writerCfg.ExcludeNet = true
+			case "pol":
+				writerCfg.ExcludePol = true
+			case "lin":
+				writerCfg.ExcludeLin = true
+			case "str":
+				writerCfg.ExcludeStr = true
+			case "bch":
+				writerCfg.ExcludeBch = true
+			default:
+				fmt.Fprintf(os.Stderr, "Warning: unknown exclusion type %q (valid: obj,fac,for,net,pol,lin,str,bch)\n", t)
+			}
+		}
 	}
 	g.Go(func() error {
 		return writer.Run(gCtx, writerCfg, converterCh)
