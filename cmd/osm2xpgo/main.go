@@ -19,10 +19,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const usage = `Usage: osm2xpgo [--dump <file.dsf>] <input.osm.pbf> [output_dir]
+const usage = `Usage: osm2xpgo [--dump <file.dsf>] [--text] <input.osm.pbf> [output_dir]
 
 Options:
   --dump <file>  Parse and display DSF file structure
+  --text         Output DSF text format (.dsf.txt) instead of binary
 `
 
 func main() {
@@ -48,13 +49,24 @@ func run(args []string) int {
 		return 0
 	}
 
-	// Convert mode: requires at least 1 positional argument.
-	if len(args) < 1 {
+	// Convert mode: parse flags and positional arguments.
+	textMode := false
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--text":
+			textMode = true
+		default:
+			positional = append(positional, args[i])
+		}
+	}
+
+	if len(positional) < 1 {
 		fmt.Fprint(os.Stderr, usage)
 		return 1
 	}
 
-	inputPath := args[0]
+	inputPath := positional[0]
 
 	// Validate input file exists and is readable.
 	if err := validateFileReadable(inputPath); err != nil {
@@ -64,8 +76,8 @@ func run(args []string) int {
 
 	// Determine output directory.
 	var outputDir string
-	if len(args) >= 2 {
-		outputDir = args[1]
+	if len(positional) >= 2 {
+		outputDir = positional[1]
 	} else {
 		outputDir = deriveOutputDir(inputPath)
 	}
@@ -95,6 +107,7 @@ func run(args []string) int {
 
 	writerCfg := writer.Config{
 		OutputDir: outputDir,
+		TextMode:  textMode,
 	}
 	g.Go(func() error {
 		return writer.Run(gCtx, writerCfg, converterCh)

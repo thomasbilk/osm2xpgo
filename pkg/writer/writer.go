@@ -15,6 +15,7 @@ type Config struct {
 	OutputDir  string
 	TileFilter *dsf.TileCoord // Optional: produce only this tile
 	BBoxFilter *BoundingBox   // Optional: produce only overlapping tiles
+	TextMode   bool           // If true, write DSF text format (.dsf.txt) instead of binary
 }
 
 // BoundingBox defines a geographic rectangle in WGS84 degrees.
@@ -75,14 +76,20 @@ write:
 			continue
 		}
 
-		// Assemble and write DSF file for this tile.
-		data, err := assembleDSF(tile, blocks)
-		if err != nil {
-			return fmt.Errorf("assembling DSF for tile %+v: %w", tile, err)
-		}
+		// Write DSF output for this tile (text or binary).
+		if cfg.TextMode {
+			if err := writeTextDSF(cfg.OutputDir, tile, blocks); err != nil {
+				return fmt.Errorf("writing DSF text for tile %+v: %w", tile, err)
+			}
+		} else {
+			data, err := assembleDSF(tile, blocks)
+			if err != nil {
+				return fmt.Errorf("assembling DSF for tile %+v: %w", tile, err)
+			}
 
-		if err := writeTileFile(cfg.OutputDir, tile, data); err != nil {
-			return err
+			if err := writeTileFile(cfg.OutputDir, tile, data); err != nil {
+				return err
+			}
 		}
 
 		writtenTiles[tile] = blocks
